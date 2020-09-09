@@ -8,9 +8,10 @@ from kubernetes import client, config
 
 from db import get_db
 from get_data import get_duty, get_cluster
+from send_to_lark import send
 
 Duty = get_duty()
-
+Duty_today = set()
 
 class ClusterInspect:
     def __init__(self,env_name, env_ip, cluster_name, cluster_ip):
@@ -49,7 +50,7 @@ class ClusterInspect:
                         }
 
         self.db.node.insert_one(db_nodes_info)
-        print('xx')
+        # print('xx')
 
 
     def get_pods_info(self):
@@ -80,26 +81,26 @@ class ClusterInspect:
 
 
             issue_flag = False
+            if container_statuses:
+                for container_status in container_statuses:
+                    mycontainer = {}
+                    mycontainer['name'] = container_status.name
+                    mycontainer['restart_count'] = container_status.restart_count
+                    mycontainer['ready'] = container_status.ready
+                    # mycontainer['state'] = container_status.state
+                    tmp = container_status.state
+                    if tmp.waiting:
+                        mycontainer['state'] = tmp.waiting.reason
+                        issue_flag = True
 
-            for container_status in container_statuses:
-                mycontainer = {}
-                mycontainer['name'] = container_status.name
-                mycontainer['restart_count'] = container_status.restart_count
-                mycontainer['ready'] = container_status.ready
-                # mycontainer['state'] = container_status.state
-                tmp = container_status.state
-                if tmp.waiting:
-                    mycontainer['state'] = tmp.waiting.reason
-                    issue_flag = True
+                    elif tmp.terminated and tmp.terminated.exit_code != 0:
+                        mycontainer['state'] = tmp.terminated.reason
+                        issue_flag = True
 
-                elif tmp.terminated and tmp.terminated.exit_code != 0:
-                    mycontainer['state'] = tmp.terminated.reason
-                    issue_flag = True
+                    else:
+                        rest.append(mypod)
 
-                else:
-                    rest.append(mypod)
-
-                mypod['container'].append(mycontainer)
+                    mypod['container'].append(mycontainer)
 
 
             if issue_flag:
@@ -116,62 +117,60 @@ class ClusterInspect:
         for pod in self.pods_info:
             pod['uuid'] = str(uuid.uuid4())
 
-            if 'clever' in pod['env_name']:
+            if 'Clever' in pod['env_name']:
                 pod['duty'] = '史缙美'
             else:
                 pod['duty'] = get_duty_man(pod['name'])
 
+            if pod['is_issue'] and pod['duty'] :
+                Duty_today.add(pod['duty'])
+            # else:
+
         self.db.pod.insert_many(self.pods_info)
 
 def check_cluster():
+    print("开始了" + str(datetime.now()))
     get_cluster()
     mydb = get_db()
     cur = mydb.cluster.find({})
     cluster = cur[0]['data']
     for i in cluster:
-        print(i)
+        # print(i)
         with open('tmp.cfg','w') as f:
             f.write(i['cfg'])
         config.kube_config.load_kube_config('tmp.cfg')
         # ...
+        # print(i)
         a = ClusterInspect(i['env_name'], i['env_vip'], i['alias'] ,i['cluster_ip'])
-        a.get_nodes_info()
+
+        # a.get_nodes_info()
         a.get_pods_info()
 
-#
-# def check_env(env):
-#     pass
+    get_today_duty_list()
+        # time.sleep(10)
 
-    # 有问题   k8cfg/2.11-rc05/...
-    # DIR = os.path.abspath(os.path.dirname(__file__))
+def get_today_duty_list():
+    open_id_list = []
+    print(Duty_today)
+    if Duty_today:
+        for i in Duty_today:
+            # print(i)
+            my_db = get_db()
+            user0 = my_db.user.find({"user_name":i})[0]
+            open_id_list.append(user0['open_id'])
 
-    # for root, dirs, files in os.walk(f'k8cfg/{env}'):
-        # cmd = f'rm -r daily_info/{env}'
-        # os.system(cmd)
-        # cmd = f'mkdir daily_info/{env}'
-        # os.system(cmd)
+        msg = ""
+        for i in open_id_list:
+            fmt = f'<at user_id="{i}"></at>'
+            # print(fmt)
+            msg += fmt
+        msg = f"你负责的组件有异常了\n {msg}"
 
-        # for name in files:
-        #     print(os.path.join(root, name))
-        #     config.kube_config.load_kube_config(config_file=os.path.join(root, name))
-        #     cname = name.split('.cfg')[0]  # 最后一个. 之前的
-        #
-        #     a = ClusterInspect(env, cname)
-        #
-        #     a.get_nodes_info()
-        #     a.get_pods_info()
-
-            # with open(f'{DIR}/daily_info/{env}/{cname}.json', 'w') as f:
-            #     json.dump(a.all_info, f)
-
-
-
-    # delete config
-# import uuid
-# def uuid1():
-#     a = uuid.uuid4()
-#     print(a)
-#     print(type(a))
+    else:
+        msg = "组件运行正常"
+    front_url = 'http://192.168.130.29:3000/pod-check/'
+    msg = f"{msg}\n{front_url}{str(datetime.date(datetime.now()))}"
+    send(msg)
 
 def get_duty_man(pod_name):
     """
@@ -197,7 +196,7 @@ if __name__ == '__main__':
     # pass
     # load_cfg('2.11-rc4')
     # load_cfg('rmrb-hz')
-    # check_cluster()
+    check_cluster()
     # uuid1()
     # print(Duty)
     # get_duty_man(pod_name='*')

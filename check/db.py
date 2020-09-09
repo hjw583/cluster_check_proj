@@ -16,8 +16,8 @@ def delete_all():
     # db.node.delete_many({})
     # db.cluster.delete_many({})
     # db.node.delete_many({})
-    db.pod.delete_many({})
-    # db.pod.delete_many({'check_time': '2020-09-08'})
+    # db.pod.delete_many({})
+    db.pod.delete_many({'check_time': '2020-09-09'})
 
     pass
 

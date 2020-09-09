@@ -6,4 +6,4 @@ services:
 
     restart: always
     volumes:
-      - /root/check:/Project/demo
+      - /root/ccp/check:/Project/demo
