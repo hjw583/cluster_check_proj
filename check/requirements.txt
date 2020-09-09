@@ -1,0 +1,5 @@
+pymongo
+paramiko
+requests
+kubernetes
+apscheduler

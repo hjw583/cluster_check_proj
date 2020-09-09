@@ -1,0 +1,6 @@
+gunicorn
+gevent
+flask
+pymongo
+requests
+flask_cors

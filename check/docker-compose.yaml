@@ -1,0 +1,9 @@
+version: '3.1'
+
+services:
+  check_cluster:
+    image: cluster_check:stable
+
+    restart: always
+    volumes:
+      - /root/check:/Project/demo

@@ -1,0 +1,13 @@
+version: '3.1'
+
+services:
+  flask:
+    image: flask_web:stable
+    ports:
+      - 2333:80
+    restart: always
+    volumes:
+      - /root/flask_web:/Project/demo
+#    environment:
+#      MONGO_INITDB_ROOT_USERNAME: mongoadmin
+#      MONGO_INITDB_ROOT_PASSWORD: mongoadmin
