@@ -109,15 +109,25 @@ class ClusterInspect:
                 self.pods_info.append(mypod)
 
         top_n = 5
-
+        # 如果 凑不齐 top 5,最后几个pod 会重复 mongo_insert_many 可能会出插入重复的问题。
         restart_most = sorted(rest, key=lambda x: x['container'][0]['restart_count'], reverse=True)[:top_n]
+        new_restart = []
+        name = ''
+        for i in restart_most:
+            if name == i['name']:
+                break
+            else:
+                name = i['name']
+                new_restart.append(i)
 
-        self.pods_info.extend(restart_most)
+        self.pods_info.extend(new_restart)
 
         for pod in self.pods_info:
             pod['uuid'] = str(uuid.uuid4())
+            # pod['_id'] = str(uuid.uuid4())
+            # pod['type'] = 'fake'
 
-            if 'Clever' in pod['env_name']:
+            if 'clever' in pod['env_name']:
                 pod['duty'] = '史缙美'
             else:
                 pod['duty'] = get_duty_man(pod['name'])
@@ -125,7 +135,7 @@ class ClusterInspect:
             if pod['is_issue'] and pod['duty'] :
                 Duty_today.add(pod['duty'])
             # else:
-
+        # print(self.pods_info)
         self.db.pod.insert_many(self.pods_info)
 
 def check_cluster():
@@ -165,7 +175,7 @@ def get_today_duty_list():
             # print(fmt)
             msg += fmt
         msg = f"你负责的组件有异常了\n {msg}"
-
+        Duty_today.clear()
     else:
         msg = "组件运行正常"
     front_url = 'http://192.168.130.29:3000/pod-check/'

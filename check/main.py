@@ -8,7 +8,7 @@ def tester():
 
 if __name__ == '__main__':
     scheduler = BlockingScheduler()
-    print("qqq")
+    # print("qqq")
     scheduler.add_job(check_cluster, "cron", day="*", hour="01")
     # check_cluster()
     # scheduler.add_job(send, "cron", args=["xxx"], day="*", hour="*", minute="*", second="*/30")
