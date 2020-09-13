@@ -1,25 +1,22 @@
 import time
 import os
 import json
-# import time
 import uuid
 from datetime import datetime
 from kubernetes import client, config
 
-from db import get_db
-from get_data import get_duty, get_cluster
-from send_to_lark import send
+from check.db import get_db
+from check.get_data import get_duty_man,duty_today_add,get_today_duty_list, get_cluster
 
-Duty = get_duty()
-Duty_today = set()
+
 
 class ClusterInspect:
-    def __init__(self,env_name, env_ip, cluster_name, cluster_ip):
+    def __init__(self,env_name, env_ip, cluster_name, cluster_ip, is_manul):
         self.env_name = env_name
         self.env_ip = env_ip
         self.cluster_name = cluster_name
         self.cluster_ip = cluster_ip
-
+        self.is_manul = is_manul
         self.nodes_info = []
         self.pods_info = []
         self.namespaces = []
@@ -62,12 +59,8 @@ class ClusterInspect:
         rest = []
         for pod in pods:
             mypod = {}
-            container_statuses = pod.status.container_statuses
             mypod['container'] = []
-            mypod['env_name'] = self.env_name
-            mypod['env_ip'] = self.env_ip
-            mypod['cluster_name'] = self.cluster_name
-            mypod['cluster_ip'] = self.cluster_ip
+
 
             # mypod['duty'] = 'hjw'
             mypod['name'] = pod.metadata.name
@@ -81,6 +74,8 @@ class ClusterInspect:
 
 
             issue_flag = False
+
+            container_statuses = pod.status.container_statuses
             if container_statuses:
                 for container_status in container_statuses:
                     mycontainer = {}
@@ -111,6 +106,9 @@ class ClusterInspect:
         top_n = 5
         # 如果 凑不齐 top 5,最后几个pod 会重复 mongo_insert_many 可能会出插入重复的问题。
         restart_most = sorted(rest, key=lambda x: x['container'][0]['restart_count'], reverse=True)[:top_n]
+        # print(rest)
+        # restart_most = sorted(rest, key=[q['container'[0]['restart_count']] for q in rest], reverse=True)[:top_n]
+        # time.sleep(100)
         new_restart = []
         name = ''
         for i in restart_most:
@@ -123,91 +121,46 @@ class ClusterInspect:
         self.pods_info.extend(new_restart)
 
         for pod in self.pods_info:
+            pod['env_name'] = self.env_name
+            pod['env_ip'] = self.env_ip
+            pod['cluster_name'] = self.cluster_name
+            pod['cluster_ip'] = self.cluster_ip
             pod['uuid'] = str(uuid.uuid4())
             # pod['_id'] = str(uuid.uuid4())
-            # pod['type'] = 'fake'
+            if self.is_manul:
+                pod['type'] = 'fake'
 
             if 'clever' in pod['env_name']:
                 pod['duty'] = '史缙美'
             else:
                 pod['duty'] = get_duty_man(pod['name'])
 
-            if pod['is_issue'] and pod['duty'] :
-                Duty_today.add(pod['duty'])
-            # else:
-        # print(self.pods_info)
+            if pod['is_issue'] and pod['duty']:
+                duty_today_add(pod['duty'])
+
         self.db.pod.insert_many(self.pods_info)
 
-def check_cluster():
+
+def check_cluster(is_manul=False):
     print("开始了" + str(datetime.now()))
     get_cluster()
-    mydb = get_db()
-    cur = mydb.cluster.find({})
-    cluster = cur[0]['data']
+    MYDB = get_db()
+    cur = MYDB.cluster.find({})
+    cluster = cur[0]['data']        # 没有怎么办
+
     for i in cluster:
-        # print(i)
         with open('tmp.cfg','w') as f:
             f.write(i['cfg'])
         config.kube_config.load_kube_config('tmp.cfg')
-        # ...
-        # print(i)
-        a = ClusterInspect(i['env_name'], i['env_vip'], i['alias'] ,i['cluster_ip'])
+
+        a = ClusterInspect(i['env_name'], i['env_vip'], i['alias'] ,i['cluster_ip'], is_manul=is_manul)
 
         # a.get_nodes_info()
         a.get_pods_info()
 
     get_today_duty_list()
-        # time.sleep(10)
-
-def get_today_duty_list():
-    open_id_list = []
-    print(Duty_today)
-    if Duty_today:
-        for i in Duty_today:
-            # print(i)
-            my_db = get_db()
-            user0 = my_db.user.find({"user_name":i})[0]
-            open_id_list.append(user0['open_id'])
-
-        msg = ""
-        for i in open_id_list:
-            fmt = f'<at user_id="{i}"></at>'
-            # print(fmt)
-            msg += fmt
-        msg = f"你负责的组件有异常了\n {msg}"
-        Duty_today.clear()
-    else:
-        msg = "组件运行正常"
-    front_url = 'http://192.168.130.29:3000/pod-check/'
-    msg = f"{msg}\n{front_url}{str(datetime.date(datetime.now()))}"
-    send(msg)
-
-def get_duty_man(pod_name):
-    """
-    alerting-controller-controller-v1-0-5c889b95f5-mqblg
-    network-agent-nwmh2
-    """
-
-    # pod_name = "alerting-controller-controller-v1-0-5c889b95f5-mqblg"
-    component_name_list = pod_name.split('-')
-    pod_name_list = "-".join(component_name_list[0:3]),"-".join(component_name_list[0:2]),"-".join(component_name_list[0:1])
-
-    for pod in pod_name_list:
-        if pod in Duty:
-            # print(Duty[pod])
-            return Duty[pod]
-
-
-    pass
 
 
 if __name__ == '__main__':
-    # check_env('2.11-rc05')
-    # pass
-    # load_cfg('2.11-rc4')
-    # load_cfg('rmrb-hz')
-    check_cluster()
-    # uuid1()
-    # print(Duty)
-    # get_duty_man(pod_name='*')
+    check_cluster(is_manul=True)
     pass

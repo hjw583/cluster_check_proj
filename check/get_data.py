@@ -1,17 +1,11 @@
-import os
-import time
-import json
-import yaml
+
 import base64
 import requests
-import re
 import paramiko
-from db import get_db
-
-
 from datetime import datetime
 
-
+from check.db import get_db
+from check.send_to_lark import send
 
 
 def get_token():
@@ -19,132 +13,155 @@ def get_token():
     return "Basic " + base64.b64encode(text.encode()).decode()
 
 
-headers = {
-    'Content-Type': 'application/json',
-    'Authorization': get_token()
-}
-
-mydb = get_db()
-
-# def get_envs():
-#     return Environments
-
 def get_k8cfg(ip):
     ssh = paramiko.SSHClient()
     know_host = paramiko.AutoAddPolicy()
+    # 允许连接不在know_hosts文件中的主机
     ssh.set_missing_host_key_policy(know_host)
-    # print(ip)
-    ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020')  # 来一个超时机制，用做换密码为2020登录
-    # print(f'after {ip} connect')
-    stdin, stdout, stderr = ssh.exec_command('cat ~/.kube/config')
-    cfg_info = stdout.read().decode('utf-8')
-
-    return cfg_info
+    try:
+        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020', timeout=5)  # 来一个超时机制，用做换密码为2020登录
+    except Exception:
+        print(f"ssh {ip} failed")
+        return None
+    else:
+        print(f"ssh {ip} success")
+        stdin, stdout, stderr = ssh.exec_command('cat ~/.kube/config')
+        cfg_info = stdout.read().decode('utf-8')
+        return cfg_info
     # pass
 
 def get_cluster():
-    # cur = mydb.env.find({})             # 从 env 读取环境
+    # cur = MYDB.env.find({})             # 从 env 读取环境
     # env_vip_list = {i: for i['vip'],j['env'] in cur}
 
-    cur = mydb.env.find({})  # 从 env 读取环境
-    env_list = {i['env']: i['vip'] for i in cur}
+    cur = MYDB.env.find({})  # 从 env 读取环境
+    try:
+        env_list = {i['env']: i['vip'] for i in cur}
+        # print(env_list)
+    except Exception:
+        # print("env is empty")
+        pass
 
-    print(env_list)
+    else:
+        cluster_info = []
+        for env, vip in env_list.items():
+            url = f'http://{vip}:6060/hodor/apis/admin.cluster.caicloud.io/v2alpha1/clusters'
+            res = requests.get(url=url, headers=headers)
+            data = res.json()
 
-    cluster_info = []
+            for i in data['items']:
+                tmp = {}
+                tmp['env_name'] = env
+                tmp['env_vip'] = vip
+                tmp['id'] = i['metadata']['id']
+                tmp['alias'] = i['metadata']['alias']
+                cluster_info.append(tmp)
 
-    for env, vip in env_list.items():
-        url = f'http://{vip}:6060/hodor/apis/admin.cluster.caicloud.io/v2alpha1/clusters'
-        res = requests.get(url=url, headers=headers)
-        data = res.json()
+        master_ips = {}
+        master_ips['date'] = str(datetime.date(datetime.now()))
+        master_ips['data'] = []
+        # print(cluster_info)
 
-        for i in data['items']:
-            tmp = {}
-            tmp['env_name'] = env
-            tmp['env_vip'] =  vip
-            tmp['id'] =  i['metadata']['id']
-            tmp['alias'] =  i['metadata']['alias']
-            cluster_info.append(tmp)
+        for data in cluster_info:
+            ip = get_master_ip(data['env_vip'], data['id'])
+            if not ip:      # 获取集群的 master 节点 ip 失败。
+                print(f"can not get master ip of {data['alias']}")
+                continue
 
+            cfg = get_k8cfg(ip)
+            if not cfg:  # ssh失败 没有拿到配置文件
+                continue
 
-    master_ips = {}
-    master_ips['date'] = str(datetime.date(datetime.now()))
-    master_ips['data'] = []
-    # print(cluster_info)
+            tmp = {
+                'env_vip': data['env_vip'],
+                'env_name': data['env_name'],
+                'cfg': cfg,
+                'id': data['id'],
+                'alias': data['alias'],
+                'cluster_ip': ip
+            }
 
-    for data in cluster_info:
-        ip = get_master_ip(data['env_vip'], data['id'])
-        cfg = get_k8cfg(ip)
+            master_ips['data'].append(tmp)
 
-        tmp = {
-            'env_vip' : data['env_vip'],
-            'env_name': data['env_name'],
-
-            'cfg' : cfg,
-            'id': data['id'],
-            'alias': data['alias'],
-            'cluster_ip': ip
-        }
-
-        master_ips['data'].append(tmp)
-    # print(master_ips)
-    # time.sleep(100)
-
-    mydb.cluster.delete_many({})
-    mydb.cluster.insert_one(master_ips)
-
+        MYDB.cluster.delete_many({})
+        MYDB.cluster.insert_one(master_ips)
 
 
 def get_master_ip(env_ip, cluster_id):
-    # vip = '192.168.129.30'
-    # cluster_id = 'user-a33684-20200823071257-1d3s'
-    # cluster_id = 'compass-stack'
-    # cluster_id = 'user-c40e5c-20200823071127-pww'
-    url = f'http://{env_ip}:6060/hodor/apis/admin.cluster.caicloud.io/v2alpha1/clusterauths/{cluster_id}'
-    res = requests.get(url=url, headers=headers)
-    # print(res.json())
-    # print(res.text)
-    data = res.json()
-    return data['endpointIP']
-    # pass
+    """
+    根据环境 ip 和 cluster_id 获得 cluster_ip
+    """
+    try:
+        url = f'http://{env_ip}:6060/hodor/apis/admin.cluster.caicloud.io/v2alpha1/clusterauths/{cluster_id}'
+        res = requests.get(url=url, headers=headers)
+        data = res.json()
+        return data['endpointIP']
 
+    except Exception:
+        return None
 
-def get_cfg_yaml():
-    with open('env.yaml', 'r') as f:
-        f_data = f.read()
-        data = yaml.safe_load(f_data)
-    return data
-
-
-def get_daily_info(env ,cluster):
-    with open(f'daily_info/{env}/{cluster}.json') as f:
-        data = json.load(f)
-    return data
 
 def get_duty():
-    cur = mydb.user.find({})
+    cur = MYDB.user.find({})
     data = [i for i in cur]
 
-    # print(data)
     component_duty = {}
     for i in data:
         for j in i['component']:
             component_duty[j] = i['user_name']
 
-    # print(component_duty)
     return component_duty
+
+def get_today_duty_list():
+    open_id_list = []
+    # print(Duty_today)
+    if Duty_today:
+        for i in Duty_today:
+            # print(i)
+
+            user0 = MYDB.user.find({"user_name":i})[0]
+            open_id_list.append(user0['open_id'])
+
+        msg = ""
+        for i in open_id_list:
+            fmt = f'<at user_id="{i}"></at>'
+            msg += fmt
+        msg = f"你负责的组件有异常了\n {msg}"
+        Duty_today.clear()
+    else:
+        msg = "组件运行正常"
+    front_url = 'http://192.168.130.29:3000/pod-check/'
+    msg = f"{msg}\n{front_url}{str(datetime.date(datetime.now()))}"
+    send(msg)
+
+
+def get_duty_man(pod_name):
+    """
+    alerting-controller-controller-v1-0-5c889b95f5-mqblg
+    network-agent-nwmh2
+    """
+    # pod_name = "alerting-controller-controller-v1-0-5c889b95f5-mqblg"
+    component_name_list = pod_name.split('-')
+    pod_name_list = "-".join(component_name_list[0:3]),"-".join(component_name_list[0:2]),"-".join(component_name_list[0:1])
+
+    for pod in pod_name_list:
+        if pod in Duty:
+            # print(Duty[pod])
+            return Duty[pod]
+
+
+def duty_today_add(name):
+    Duty_today.add(name)
+
+
+MYDB = get_db()
+Duty = get_duty()
+Duty_today = set()
+headers = {
+    'Content-Type': 'application/json',
+    'Authorization': get_token()
+}
 
 
 if __name__ == '__main__':
-    # get_daily_info('2.11-rc4', 'compass-stack',)
-    # get_cluster()
-    # get_cfg()
     get_cluster()
-    # read_cfg()
-    # get_duty()
-    pass
-
-'''
-
-
-'''
