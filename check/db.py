@@ -15,7 +15,7 @@ def delete_all():
     db = get_db()
     # db.node.delete_many({})
     # db.cluster.delete_many({})
-    db.pod.delete_many({'type': 'fake'})
+    db.pod.delete_many({'check_time': '2020-1-1'})
     pass
 
 

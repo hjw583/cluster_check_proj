@@ -1,11 +1,11 @@
-
+import time
 import base64
 import requests
 import paramiko
 from datetime import datetime
 
-from check.db import get_db
-from check.send_to_lark import send
+from db import get_db
+from send_to_lark import send
 
 
 def get_token():
@@ -112,13 +112,13 @@ def get_duty():
 
     return component_duty
 
-def get_today_duty_list():
+def get_today_duty_list(is_manul=False):
     open_id_list = []
     # print(Duty_today)
+    duty_today_add(is_manul)
+
     if Duty_today:
         for i in Duty_today:
-            # print(i)
-
             user0 = MYDB.user.find({"user_name":i})[0]
             open_id_list.append(user0['open_id'])
 
@@ -131,8 +131,11 @@ def get_today_duty_list():
     else:
         msg = "组件运行正常"
     front_url = 'http://192.168.130.29:3000/pod-check/'
-    msg = f"{msg}\n{front_url}{str(datetime.date(datetime.now()))}"
-    send(msg)
+    time1 = str(datetime.date(datetime.now()))
+    if is_manul:
+        time1 = '2020-01-01'
+    msg = f"{msg}\n{front_url}{time1}"
+    send(msg, is_manul)
 
 
 def get_duty_man(pod_name):
@@ -150,8 +153,22 @@ def get_duty_man(pod_name):
             return Duty[pod]
 
 
-def duty_today_add(name):
-    Duty_today.add(name)
+def duty_today_add(is_manul=False):
+    time1 = str(datetime.date(datetime.now()))
+    # MYDB.user
+    if is_manul:
+        time1 = '2020-01-01'
+    cur = MYDB.pod.find({'check_time':time1})
+    pod_data = [i for i in cur]
+    if pod_data:
+        for i in pod_data:
+            if i['is_issue'] == True:
+                Duty_today.add(i['duty'])
+
+    print(Duty_today)
+
+    # time.sleep(1000)
+    # Duty_today.add(name)
 
 
 MYDB = get_db()
@@ -164,4 +181,5 @@ headers = {
 
 
 if __name__ == '__main__':
-    get_cluster()
+    # get_cluster()get_
+    get_today_duty_list(is_manul=True)

@@ -5,9 +5,8 @@ import uuid
 from datetime import datetime
 from kubernetes import client, config
 
-from check.db import get_db
-from check.get_data import get_duty_man,duty_today_add,get_today_duty_list, get_cluster
-
+from db import get_db
+from get_data import get_duty_man, get_cluster
 
 
 class ClusterInspect:
@@ -128,15 +127,15 @@ class ClusterInspect:
             pod['uuid'] = str(uuid.uuid4())
             # pod['_id'] = str(uuid.uuid4())
             if self.is_manul:
-                pod['type'] = 'fake'
+                pod['check_time'] = '2020-01-01'
 
             if 'clever' in pod['env_name']:
                 pod['duty'] = '史缙美'
             else:
                 pod['duty'] = get_duty_man(pod['name'])
 
-            if pod['is_issue'] and pod['duty']:
-                duty_today_add(pod['duty'])
+            # if pod['is_issue'] and pod['duty']:
+            #     duty_today_add(pod['duty'])
 
         self.db.pod.insert_many(self.pods_info)
 
@@ -158,7 +157,7 @@ def check_cluster(is_manul=False):
         # a.get_nodes_info()
         a.get_pods_info()
 
-    get_today_duty_list()
+    # get_today_duty_list()
 
 
 if __name__ == '__main__':
