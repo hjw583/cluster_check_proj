@@ -20,15 +20,19 @@ def get_k8cfg(ip):
     ssh.set_missing_host_key_policy(know_host)
     try:
         ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020', timeout=5)  # 来一个超时机制，用做换密码为2020登录
-    except Exception:
-        print(f"ssh {ip} failed")
-        return None
-    else:
         print(f"ssh {ip} success")
-        stdin, stdout, stderr = ssh.exec_command('cat ~/.kube/config')
-        cfg_info = stdout.read().decode('utf-8')
-        return cfg_info
-    # pass
+    except Exception:
+        print(f"ssh {ip} failed try, to use 2019")
+        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2019', timeout=5)     # 还连不上？？ 应该不存在
+        print(f"ssh {ip} success")
+        # return None
+    finally:
+        try:
+            stdin, stdout, stderr = ssh.exec_command('cat ~/.kube/config')
+            cfg_info = stdout.read().decode('utf-8')
+            return cfg_info
+        except Exception:
+            return None
 
 def get_cluster():
     # cur = MYDB.env.find({})             # 从 env 读取环境
@@ -41,21 +45,23 @@ def get_cluster():
     except Exception:
         # print("env is empty")
         pass
-
     else:
         cluster_info = []
         for env, vip in env_list.items():
             url = f'http://{vip}:6060/hodor/apis/admin.cluster.caicloud.io/v2alpha1/clusters'
-            res = requests.get(url=url, headers=headers)
-            data = res.json()
-
-            for i in data['items']:
-                tmp = {}
-                tmp['env_name'] = env
-                tmp['env_vip'] = vip
-                tmp['id'] = i['metadata']['id']
-                tmp['alias'] = i['metadata']['alias']
-                cluster_info.append(tmp)
+            try:
+                res = requests.get(url=url, headers=headers)
+            except Exception:
+                print(f"ssh {url} error ")
+            else:
+                data = res.json()
+                for i in data['items']:
+                    tmp = {}
+                    tmp['env_name'] = env
+                    tmp['env_vip'] = vip
+                    tmp['id'] = i['metadata']['id']
+                    tmp['alias'] = i['metadata']['alias']
+                    cluster_info.append(tmp)
 
         master_ips = {}
         master_ips['date'] = str(datetime.date(datetime.now()))
@@ -114,7 +120,6 @@ def get_duty():
 
 def get_today_duty_list(is_manul=False):
     open_id_list = []
-    # print(Duty_today)
     duty_today_add(is_manul)
 
     if Duty_today:
@@ -122,20 +127,39 @@ def get_today_duty_list(is_manul=False):
             user0 = MYDB.user.find({"user_name":i})[0]
             open_id_list.append(user0['open_id'])
 
-        msg = ""
-        for i in open_id_list:
-            fmt = f'<at user_id="{i}"></at>'
-            msg += fmt
-        msg = f"你负责的组件有异常了\n {msg}"
-        Duty_today.clear()
+    return open_id_list
+
+
+def get_msg(is_manul=False):
+    open_id_list = get_today_duty_list(is_manul)
+    cur = MYDB.env.find({})
+    try:
+        env_dict = {i['env']: i['vip'] for i in cur}
+        # print(env_list)
+    except Exception:
+        # print("env is empty")
+        pass
     else:
-        msg = "组件运行正常"
-    front_url = 'http://192.168.130.29:3000/pod-check/'
-    time1 = str(datetime.date(datetime.now()))
-    if is_manul:
-        time1 = '2020-01-01'
-    msg = f"{msg}\n{front_url}{time1}"
-    send(msg, is_manul)
+        len_env = len(env_dict)
+        msg = f'本次巡检共检查{len_env}个环境'
+        for k, v in env_dict.items():
+            msg += f'\n{k}\t{v}'
+
+        if open_id_list:
+            msg += f"\n存在组件异常\n"
+            for i in open_id_list:
+                fmt = f'<at user_id="{i}"></at>'
+                msg += fmt
+            Duty_today.clear()
+        else:
+            msg += "\n组件运行正常"
+
+        front_url = 'http://192.168.130.29:3000/pod-check/'
+        time1 = str(datetime.date(datetime.now()))
+        if is_manul:
+            time1 = time1.replace('2020','2019')
+        msg = f"{msg}\n{front_url}{time1}"
+        send(msg, is_manul)
 
 
 def get_duty_man(pod_name):
@@ -143,21 +167,20 @@ def get_duty_man(pod_name):
     alerting-controller-controller-v1-0-5c889b95f5-mqblg
     network-agent-nwmh2
     """
-    # pod_name = "alerting-controller-controller-v1-0-5c889b95f5-mqblg"
     component_name_list = pod_name.split('-')
     pod_name_list = "-".join(component_name_list[0:3]),"-".join(component_name_list[0:2]),"-".join(component_name_list[0:1])
 
     for pod in pod_name_list:
         if pod in Duty:
-            # print(Duty[pod])
             return Duty[pod]
+
+    return '贺家伟'
 
 
 def duty_today_add(is_manul=False):
     time1 = str(datetime.date(datetime.now()))
-    # MYDB.user
     if is_manul:
-        time1 = '2020-01-01'
+        time1 = time1.replace('2020','2019')
     cur = MYDB.pod.find({'check_time':time1})
     pod_data = [i for i in cur]
     if pod_data:
@@ -165,10 +188,6 @@ def duty_today_add(is_manul=False):
             if i['is_issue'] == True:
                 Duty_today.add(i['duty'])
 
-    print(Duty_today)
-
-    # time.sleep(1000)
-    # Duty_today.add(name)
 
 
 MYDB = get_db()
@@ -181,5 +200,6 @@ headers = {
 
 
 if __name__ == '__main__':
-    # get_cluster()get_
-    get_today_duty_list(is_manul=True)
+    # get_cluster()
+    # get_today_duty_list(is_manul=True)
+    get_msg(is_manul=True)

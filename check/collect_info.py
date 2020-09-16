@@ -36,12 +36,14 @@ class ClusterInspect:
             node_info['condition'] = node.status.conditions[-1].type
             self.nodes_info.append(node_info)
 
+        time1 =  str(datetime.date(datetime.now()))
+        if self.is_manul:
+            time1 = time1.replace('2020','2019')
         # self.all_info['nodes_info'] = self.nodes_info
-        # self.nodes_info = {'check_time': time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) }
         db_nodes_info = {
                          'env': self.env_ip,
                          'cluster_name': self.cluster_name,
-                         'check_time': str(datetime.date(datetime.now())),          # 2020-09-01
+                         'check_time':  time1,        # 2020-09-01
                          'nodes_info': self.nodes_info
                         }
 
@@ -99,7 +101,6 @@ class ClusterInspect:
 
             if issue_flag:
                 mypod['is_issue'] = True
-                # mypod['uuid'] = str(uuid.uuid4())
                 self.pods_info.append(mypod)
 
         top_n = 5
@@ -125,17 +126,14 @@ class ClusterInspect:
             pod['cluster_name'] = self.cluster_name
             pod['cluster_ip'] = self.cluster_ip
             pod['uuid'] = str(uuid.uuid4())
-            # pod['_id'] = str(uuid.uuid4())
-            if self.is_manul:
-                pod['check_time'] = '2020-01-01'
 
+            if self.is_manul:
+                pod['check_time'] = pod['check_time'].replace('2020', '2019')
+                pod['fake'] = True
             if 'clever' in pod['env_name']:
                 pod['duty'] = '史缙美'
             else:
                 pod['duty'] = get_duty_man(pod['name'])
-
-            # if pod['is_issue'] and pod['duty']:
-            #     duty_today_add(pod['duty'])
 
         self.db.pod.insert_many(self.pods_info)
 
@@ -161,5 +159,5 @@ def check_cluster(is_manul=False):
 
 
 if __name__ == '__main__':
+    # check_cluster(is_manul=False)
     check_cluster(is_manul=True)
-    pass
