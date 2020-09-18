@@ -19,11 +19,11 @@ def get_k8cfg(ip):
     # 允许连接不在know_hosts文件中的主机
     ssh.set_missing_host_key_policy(know_host)
     try:
-        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020', timeout=5)  # 来一个超时机制，用做换密码为2020登录
+        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020', timeout=10)  # 来一个超时机制，用做换密码为2020登录
         print(f"ssh {ip} success")
     except Exception:
-        print(f"ssh {ip} failed try, to use 2019")
-        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2019', timeout=5)     # 还连不上？？ 应该不存在
+        print(f"ssh {ip} failed, try to use 2019")
+        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2019', timeout=10)     # 还连不上？？ 应该不存在
         print(f"ssh {ip} success")
         # return None
     finally:
@@ -118,9 +118,9 @@ def get_duty():
 
     return component_duty
 
-def get_today_duty_list(is_manul=False):
+
+def get_today_duty_list():
     open_id_list = []
-    duty_today_add(is_manul)
 
     if Duty_today:
         for i in Duty_today:
@@ -131,7 +131,8 @@ def get_today_duty_list(is_manul=False):
 
 
 def get_msg(is_manul=False):
-    open_id_list = get_today_duty_list(is_manul)
+    duty_today_add(is_manul)
+    open_id_list = get_today_duty_list()
     cur = MYDB.env.find({})
     try:
         env_dict = {i['env']: i['vip'] for i in cur}
@@ -173,7 +174,7 @@ def get_duty_man(pod_name):
     for pod in pod_name_list:
         if pod in Duty:
             return Duty[pod]
-
+    # 没找到责任人
     return '贺家伟'
 
 
@@ -185,7 +186,7 @@ def duty_today_add(is_manul=False):
     pod_data = [i for i in cur]
     if pod_data:
         for i in pod_data:
-            if i['is_issue'] == True:
+            if i['is_issue']:
                 Duty_today.add(i['duty'])
 
 
@@ -201,5 +202,4 @@ headers = {
 
 if __name__ == '__main__':
     # get_cluster()
-    # get_today_duty_list(is_manul=True)
     get_msg(is_manul=True)

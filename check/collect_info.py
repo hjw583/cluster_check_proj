@@ -61,9 +61,6 @@ class ClusterInspect:
         for pod in pods:
             mypod = {}
             mypod['container'] = []
-
-
-            # mypod['duty'] = 'hjw'
             mypod['name'] = pod.metadata.name
             mypod['namespace'] = pod.metadata.namespace
             mypod['pod_phase'] = pod.status.phase
@@ -72,7 +69,6 @@ class ClusterInspect:
             mypod['is_issue'] = False
             mypod['comment'] = ''
             mypod['check_time'] = time1
-
 
             issue_flag = False
 
@@ -97,7 +93,6 @@ class ClusterInspect:
                         rest.append(mypod)
 
                     mypod['container'].append(mycontainer)
-
 
             if issue_flag:
                 mypod['is_issue'] = True
