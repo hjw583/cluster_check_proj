@@ -50,7 +50,6 @@ class ClusterInspect:
         self.db.node.insert_one(db_nodes_info)
         # print('xx')
 
-
     def get_pods_info(self):
         time1 = str(datetime.date(datetime.now()))
         pods = self.v1.list_pod_for_all_namespaces()
@@ -69,16 +68,28 @@ class ClusterInspect:
             mypod['is_issue'] = False
             mypod['comment'] = ''
             mypod['check_time'] = time1
-
             issue_flag = False
 
+            if mypod['pod_phase'] not in ['Running', 'Succeeded']:
+                print(self.env_name, self.cluster_ip, mypod['name'])
+                print(pod.status.phase)
+                issue_flag = True
+                mypod['is_issue'] = True
+                mypod['reason'] = pod.status.reason
+                # continue
+                # time.sleep(100)
+
             container_statuses = pod.status.container_statuses
+
             if container_statuses:
                 for container_status in container_statuses:
+                    # canal的pod 有两个容器
+                    # 两个容器状态 一个好的，一个坏的，所以一个进了rest的数组，一个进了 issue 的数组，最后insert error。
                     mycontainer = {}
                     mycontainer['name'] = container_status.name
                     mycontainer['restart_count'] = container_status.restart_count
                     mycontainer['ready'] = container_status.ready
+
                     # mycontainer['state'] = container_status.state
                     tmp = container_status.state
                     if tmp.waiting:
@@ -89,28 +100,32 @@ class ClusterInspect:
                         mycontainer['state'] = tmp.terminated.reason
                         issue_flag = True
 
-                    else:
-                        rest.append(mypod)
-
                     mypod['container'].append(mycontainer)
+
+            # else:
+            #     print(self.env_name , self.cluster_ip)
+            #     print(mypod)
+            #     time.sleep(100)
 
             if issue_flag:
                 mypod['is_issue'] = True
                 self.pods_info.append(mypod)
-
+            else:
+                rest.append(mypod)
+        # print(rest)
         top_n = 5
         # 如果 凑不齐 top 5,最后几个pod 会重复 mongo_insert_many 可能会出插入重复的问题。
+        # try:
         restart_most = sorted(rest, key=lambda x: x['container'][0]['restart_count'], reverse=True)[:top_n]
-        # print(rest)
-        # restart_most = sorted(rest, key=[q['container'[0]['restart_count']] for q in rest], reverse=True)[:top_n]
-        # time.sleep(100)
+        # restart_most = sorted(rest, key=lambda x: x['container'][0]['restart_count'], reverse=True)[:top_n]
+
         new_restart = []
-        name = ''
+        names = []
         for i in restart_most:
-            if name == i['name']:
-                break
+            if i['name'] in names:
+                continue
             else:
-                name = i['name']
+                names.append(i['name'])
                 new_restart.append(i)
 
         self.pods_info.extend(new_restart)
@@ -130,7 +145,13 @@ class ClusterInspect:
             else:
                 pod['duty'] = get_duty_man(pod['name'])
 
+        # print(self.pods_info)
+        # try:
         self.db.pod.insert_many(self.pods_info)
+        # except Exception:
+        #     print(Exception.args)
+        #     # print(json.dumps(self.pods_info))
+        #     print(self.pods_info)
 
 
 def check_cluster(is_manul=False):
@@ -154,5 +175,5 @@ def check_cluster(is_manul=False):
 
 
 if __name__ == '__main__':
-    # check_cluster(is_manul=False)
-    check_cluster(is_manul=True)
+    check_cluster(is_manul=False)
+    # check_cluster(is_manul=True)
