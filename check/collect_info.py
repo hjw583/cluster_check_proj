@@ -1,6 +1,7 @@
 import time
 import os
 import json
+import traceback
 import uuid
 from datetime import datetime
 from kubernetes import client, config
@@ -90,7 +91,6 @@ class ClusterInspect:
                     mycontainer['restart_count'] = container_status.restart_count
                     mycontainer['ready'] = container_status.ready
 
-                    # mycontainer['state'] = container_status.state
                     tmp = container_status.state
                     if tmp.waiting:
                         mycontainer['state'] = tmp.waiting.reason
@@ -102,10 +102,6 @@ class ClusterInspect:
 
                     mypod['container'].append(mycontainer)
 
-            # else:
-            #     print(self.env_name , self.cluster_ip)
-            #     print(mypod)
-            #     time.sleep(100)
 
             if issue_flag:
                 mypod['is_issue'] = True
@@ -115,9 +111,7 @@ class ClusterInspect:
         # print(rest)
         top_n = 5
         # 如果 凑不齐 top 5,最后几个pod 会重复 mongo_insert_many 可能会出插入重复的问题。
-        # try:
         restart_most = sorted(rest, key=lambda x: x['container'][0]['restart_count'], reverse=True)[:top_n]
-        # restart_most = sorted(rest, key=lambda x: x['container'][0]['restart_count'], reverse=True)[:top_n]
 
         new_restart = []
         names = []
@@ -146,10 +140,11 @@ class ClusterInspect:
                 pod['duty'] = get_duty_man(pod['name'])
 
         # print(self.pods_info)
-        # try:
-        self.db.pod.insert_many(self.pods_info)
-        # except Exception:
-        #     print(Exception.args)
+        try:
+            self.db.pod.insert_many(self.pods_info)
+        except Exception:
+            traceback.print_exc()
+            # print(Exception.args)
         #     # print(json.dumps(self.pods_info))
         #     print(self.pods_info)
 
@@ -175,5 +170,5 @@ def check_cluster(is_manul=False):
 
 
 if __name__ == '__main__':
-    check_cluster(is_manul=False)
-    # check_cluster(is_manul=True)
+    # check_cluster(is_manul=False)
+    check_cluster(is_manul=True)

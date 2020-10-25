@@ -51,10 +51,8 @@ def get_cluster():
             url = f'http://{vip}:6060/hodor/apis/admin.cluster.caicloud.io/v2alpha1/clusters'
             try:
                 res = requests.get(url=url, headers=headers)
-            except Exception:
-                print(f"ssh {url} error ")
-            else:
                 data = res.json()
+                print(data)
                 for i in data['items']:
                     tmp = {}
                     tmp['env_name'] = env
@@ -62,6 +60,8 @@ def get_cluster():
                     tmp['id'] = i['metadata']['id']
                     tmp['alias'] = i['metadata']['alias']
                     cluster_info.append(tmp)
+            except Exception:
+                print("调用平台接口失败，请检查 cps web 的状态")
 
         master_ips = {}
         master_ips['date'] = str(datetime.date(datetime.now()))
@@ -203,3 +203,4 @@ headers = {
 if __name__ == '__main__':
     # get_cluster()
     get_msg(is_manul=True)
+    # get_msg(is_manul=False)
