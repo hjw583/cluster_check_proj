@@ -18,24 +18,41 @@ def get_k8cfg(ip):
     know_host = paramiko.AutoAddPolicy()
     # 允许连接不在know_hosts文件中的主机
     ssh.set_missing_host_key_policy(know_host)
-    try:
-        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020', timeout=10)  # 来一个超时机制，用做换密码为2020登录
-        print(f"ssh {ip} success")
-    except Exception:
-        print(f"ssh {ip} failed, try to use 2019")
-        ssh.connect(hostname=ip, port=22, username='root', password='caicloud2019', timeout=10)     # 还连不上？？ 应该不存在
-        print(f"ssh {ip} success")
-        # return None
-    finally:
-        try:
-            stdin, stdout, stderr = ssh.exec_command('cat ~/.kube/config')
-            cfg_info = stdout.read().decode('utf-8')
-            return cfg_info
-        except Exception:
-            return None
+    user_name_list = ['root', 'caicloud']
+    password = ['caicloud2020', 'caicloud2019']
+
+    for u in user_name_list:
+        for p in password:
+            try:
+                ssh.connect(hostname=ip, username=u, password=p)
+                stdin, stdout, stderr = ssh.exec_command(f'echo {p} | sudo -S cat /root/.kube/config')
+                print(f'ssh {ip} success')
+                cfg_info = stdout.read().decode('utf-8')
+                return cfg_info
+            except:
+                print(f"ssh {ip} with {u} error")
+
+    return None
+        # break
+
+    # try:
+    #     ssh.connect(hostname=ip, port=22, username='root', password='caicloud2020', timeout=10)
+    #     print(f"ssh {ip} success")
+    # except Exception:
+    #     print(f"ssh {ip} failed, try to use 2019")
+    #     ssh.connect(hostname=ip, port=22, username='root', password='caicloud2019', timeout=10)
+    #     print(f"ssh {ip} success")
+    #     # return None
+    # finally:
+    #     try:
+    #         stdin, stdout, stderr = ssh.exec_command('cat ~/.kube/config')
+    #         cfg_info = stdout.read().decode('utf-8')
+    #         return cfg_info
+    #     except Exception:
+    #         return None
 
 def get_cluster():
-    # cur = MYDB.env.find({})             # 从 env 读取环境
+    # cur = MYDB.env.find({})             从 env 读取环境
     # env_vip_list = {i: for i['vip'],j['env'] in cur}
 
     cur = MYDB.env.find({})  # 从 env 读取环境
@@ -52,7 +69,7 @@ def get_cluster():
             try:
                 res = requests.get(url=url, headers=headers)
                 data = res.json()
-                print(data)
+                # print(data)
                 for i in data['items']:
                     tmp = {}
                     tmp['env_name'] = env
@@ -61,6 +78,7 @@ def get_cluster():
                     tmp['alias'] = i['metadata']['alias']
                     cluster_info.append(tmp)
             except Exception:
+                print(env)
                 print("调用平台接口失败，请检查 cps web 的状态")
 
         master_ips = {}

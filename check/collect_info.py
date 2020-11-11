@@ -163,7 +163,6 @@ def check_cluster(is_manul=False):
 
         a = ClusterInspect(i['env_name'], i['env_vip'], i['alias'] ,i['cluster_ip'], is_manul=is_manul)
 
-        # a.get_nodes_info()
         a.get_pods_info()
 
     # get_today_duty_list()
